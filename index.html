@@ -28,8 +28,11 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="telegram-id">ID de Telegram</label>
-                    <input type="text" id="telegram-id" name="telegram_id" placeholder="Ej. @juanperez">
+                    <label for="telegram-id">ID de Telegram (numérico)</label>
+                    <input type="text" id="telegram-id" name="telegram_id" placeholder="Ej. 123456789"
+                           inputmode="numeric" pattern="\d{5,15}" title="Solo números (entre 5 y 15 dígitos)"
+                           aria-describedby="telegram-help" required>
+                    <span id="telegram-help" class="file-help">Escríbele <strong>/start</strong> al bot y obtén tu ID con @userinfobot.</span>
                 </div>
             </div>
 
@@ -64,15 +67,18 @@
 
             <div class="form-group">
                 <label for="adjunto" class="file-label">Documentación de respaldo (Imágenes o PDF)</label>
-                <input type="file" id="adjunto" name="adjunto" accept="image/*, .pdf" required>
-                <span class="file-help">Formatos permitidos: JPG, PNG, PDF. Máximo 5MB.</span>
+                <input type="file" id="adjunto" name="adjunto" accept="image/jpeg, image/png, application/pdf"
+                       aria-describedby="adjunto-help" required>
+                <span id="adjunto-help" class="file-help">Formatos permitidos: JPG, PNG, PDF. Máximo 5MB.</span>
             </div>
 
             <button type="submit" class="btn-submit">Enviar formulario</button>
 
+            <p id="form-status" class="form-status" role="status" aria-live="polite" hidden></p>
+
         </form>
     </main>
 
-    <script src="app.js"></script>
+    <script src="app.js" defer></script>
 </body>
 </html>
