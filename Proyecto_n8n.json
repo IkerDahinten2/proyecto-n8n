@@ -96,7 +96,7 @@
                 },
                 "conditions": [
                   {
-                    "id": "b325bb71-1e3b-4d83-ba29-87468a775f8f",
+                    "id": "73cd6afe-e294-44f9-949b-cc601196948a",
                     "leftValue": "={{ $json.nivel_confianza >= 80 && $json.veredicto === 'Aprobado' }}",
                     "rightValue": "",
                     "operator": {
@@ -121,7 +121,7 @@
                 },
                 "conditions": [
                   {
-                    "id": "36f0397f-3969-4b6e-b457-d9ba385b0c76",
+                    "id": "2510c259-0531-49e9-8f57-f30dd9374268",
                     "leftValue": "={{ !($json.nivel_confianza >= 80 && ['Aprobado', 'Rechazado'].includes($json.veredicto)) }}",
                     "rightValue": "",
                     "operator": {
@@ -146,7 +146,7 @@
                 },
                 "conditions": [
                   {
-                    "id": "cbb8d5be-67b1-4078-a734-88a8db5077a7",
+                    "id": "bbbd5e2f-f2e2-49e3-a8c7-cdfc1496c061",
                     "leftValue": "={{ $json.nivel_confianza >= 80 && $json.veredicto === 'Rechazado' }}",
                     "rightValue": "",
                     "operator": {
@@ -709,7 +709,7 @@
                 },
                 "conditions": [
                   {
-                    "id": "9b1ed12b-95b7-455c-ba16-3ba01a5bde66",
+                    "id": "862e946c-f622-459c-86c9-b843ff1151c9",
                     "leftValue": "={{ ($json.message.text || '').trim().toLowerCase() }}",
                     "rightValue": "^(/start|hola|buen)",
                     "operator": {
@@ -733,7 +733,7 @@
                 },
                 "conditions": [
                   {
-                    "id": "9a096510-bf5a-49a8-8549-b08bb9bf5a4a",
+                    "id": "fe969617-5d21-4e68-8f1c-8ff869a9cb75",
                     "leftValue": "={{ ($json.message.text || '').trim() }}",
                     "rightValue": "^[A-Za-z]{0,5}-?\\d{1,10}$",
                     "operator": {
@@ -817,7 +817,7 @@
           },
           "conditions": [
             {
-              "id": "80856a2c-11a0-4877-87d8-4606f5cdb474",
+              "id": "f638d80e-b0c2-46fc-aecf-706b3b02ca3a",
               "leftValue": "={{ $json.estado }}",
               "rightValue": "",
               "operator": {
@@ -907,98 +907,7 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 3
-          },
-          "conditions": [
-            {
-              "id": "c4ff45ff-95ce-4156-b47f-932818d6a909",
-              "leftValue": "={{ $json.fecha }}",
-              "rightValue": "={{ $json.fecha }}",
-              "operator": {
-                "type": "dateTime",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
-      "position": [
-        -608,
-        1728
-      ],
-      "id": "1e292ddf-278a-4486-93e3-419636074d71",
-      "name": "If1"
-    },
-    {
-      "parameters": {
-        "chatId": "=6878861034",
-        "text": "hola",
-        "additionalFields": {}
-      },
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        16,
-        1728
-      ],
-      "id": "ac53acc7-9d36-4999-b2f1-f413696ef1fe",
-      "name": "Send a text message6",
-      "webhookId": "1286ec33-246a-4715-b9f4-5f11f6265d23",
-      "credentials": {
-        "telegramApi": {
-          "id": "OAavOYsMfJdfuBK8",
-          "name": "Telegram account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "8566d2f7-26c7-4e22-9683-32908bf80231",
-              "name": "fecha",
-              "value": "Esta semana no han habido formularios de inasistencia",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        -304,
-        1568
-      ],
-      "id": "f33aa423-73e1-4df8-bd3f-ee1bae84ec86",
-      "name": "No encontrado"
-    },
-    {
-      "parameters": {
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        -304,
-        1904
-      ],
-      "id": "3e22f739-a19e-4912-a780-39fde065a04f",
-      "name": "Reporte Semanal"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nfor (const item of $input.all()) {\n  item.json.myNewField = 1;\n}\n\nreturn $input.all();"
+        "jsCode": "// Resume las solicitudes registradas en los últimos 7 días, agrupadas por estado.\nconst DIAS = 7;\nconst hoy = new Date();\nconst desde = new Date(hoy.getTime() - DIAS * 24 * 60 * 60 * 1000);\nconst formato = (fecha) => fecha.toISOString().slice(0, 10);\n\nconst filas = $input.all().map(item => item.json).filter(fila => fila.estado);\nconst semana = filas.filter(fila => {\n  const fecha = new Date(fila.fecha_registro || fila.fecha);\n  return !Number.isNaN(fecha.getTime()) && fecha >= desde && fecha <= hoy;\n});\n\nconst conteo = semana.reduce((acc, fila) => {\n  acc[fila.estado] = (acc[fila.estado] || 0) + 1;\n  return acc;\n}, {});\n\nconst mensaje = semana.length === 0\n  ? '📊 Reporte semanal: esta semana no hubo solicitudes de inasistencia.'\n  : [\n      '📊 Reporte semanal de inasistencias',\n      `Periodo: ${formato(desde)} a ${formato(hoy)}`,\n      `Total de solicitudes: ${semana.length}`,\n      '',\n      ...Object.entries(conteo).map(([estado, total]) => `• ${estado}: ${total}`)\n    ].join('\\n');\n\nreturn [{ json: { mensaje, total: semana.length, conteo } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1025,15 +934,6 @@
           "cachedResultName": "Hoja 1",
           "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1gfPvdrvHnWJyxWgctIuzxJabhT2cFlgJwRSlYWO0q-w/edit#gid=0"
         },
-        "filtersUI": {
-          "values": [
-            {
-              "lookupColumn": "fecha",
-              "lookupValue": "2026-05-29"
-            }
-          ]
-        },
-        "combineFilters": "OR",
         "options": {}
       },
       "type": "n8n-nodes-base.googleSheets",
@@ -1050,7 +950,8 @@
           "id": "hpzobAPVQNFcXILW",
           "name": "Google Sheets account"
         }
-      }
+      },
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -1087,8 +988,29 @@
         224,
         200
       ],
-      "id": "d74d3c92-94fa-4885-bc99-ba9e2f4baf7b",
+      "id": "d3292e78-7729-4550-a8ea-dbfe54ffb66c",
       "name": "Notificar en revisión (estudiante)",
+      "credentials": {
+        "telegramApi": {
+          "id": "OAavOYsMfJdfuBK8",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "6878861034",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -556,
+        1728
+      ],
+      "id": "8cad3963-8349-4dee-8ef6-07aebb827598",
+      "name": "Enviar reporte (admin)",
       "credentials": {
         "telegramApi": {
           "id": "OAavOYsMfJdfuBK8",
@@ -1264,51 +1186,11 @@
         ]
       ]
     },
-    "If1": {
-      "main": [
-        [
-          {
-            "node": "No encontrado",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Reporte Semanal",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "No encontrado": {
-      "main": [
-        [
-          {
-            "node": "Send a text message6",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Reporte Semanal": {
-      "main": [
-        [
-          {
-            "node": "Send a text message6",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Construir reporte semanal": {
       "main": [
         [
           {
-            "node": "If1",
+            "node": "Enviar reporte (admin)",
             "type": "main",
             "index": 0
           }
