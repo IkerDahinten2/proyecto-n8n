@@ -14,7 +14,7 @@
         288
       ],
       "id": "c110e4ab-ddef-4201-98a1-5aa4b42d701e",
-      "name": "Webhook1",
+      "name": "Webhook Formulario",
       "webhookId": "0e0db6af-ba64-4d04-91ab-e057c2e017fa"
     },
     {
@@ -44,7 +44,7 @@
         288
       ],
       "id": "f3e15c53-f30b-4cc7-a7a0-33c67d721a17",
-      "name": "Basic LLM Chain1",
+      "name": "Evaluar con IA",
       "retryOnFail": true,
       "waitBetweenTries": 2000
     },
@@ -60,7 +60,7 @@
         512
       ],
       "id": "0de96c2e-9a4a-4541-9e12-52a59f3aa885",
-      "name": "Google Gemini Chat Model1",
+      "name": "Google Gemini",
       "credentials": {
         "googlePalmApi": {
           "id": "imxEn6x5R8TFcJTc",
@@ -80,7 +80,7 @@
         288
       ],
       "id": "c263350a-20dd-4e97-93e4-3c64d80bbb19",
-      "name": "Code in JavaScript1"
+      "name": "Normalizar respuesta IA"
     },
     {
       "parameters": {
@@ -163,7 +163,7 @@
         272
       ],
       "id": "08715316-108b-4ff0-9145-bc4895d2bb4a",
-      "name": "Switch"
+      "name": "Enrutar por veredicto"
     },
     {
       "parameters": {
@@ -178,7 +178,7 @@
         0
       ],
       "id": "cd627007-b60a-432d-a902-69ec7c92554a",
-      "name": "Send a text message",
+      "name": "Notificar aprobado",
       "webhookId": "f5ffb31d-ff02-444b-a4b9-4a0e6a832da2",
       "credentials": {
         "telegramApi": {
@@ -190,7 +190,7 @@
     {
       "parameters": {
         "chatId": "6878861034",
-        "text": "=⚠️ ALERTA: Se requiere revisión manual.\nEl alumno {{ $('Webhook1').item.json.body['Nombre completo'] }} subió una justificación pero el sistema determinó duda.\nRazón de la IA: {{ $json.observaciones }}",
+        "text": "=⚠️ ALERTA: Se requiere revisión manual.\nEl alumno {{ $('Webhook Formulario').item.json.body['Nombre completo'] }} subió una justificación pero el sistema determinó duda.\nRazón de la IA: {{ $json.observaciones }}",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -200,7 +200,7 @@
         224
       ],
       "id": "d1758d43-fdf2-4f94-9bfd-8fe66cd5f879",
-      "name": "Send a text message1",
+      "name": "Alertar revisión manual (admin)",
       "webhookId": "f5ffb31d-ff02-444b-a4b9-4a0e6a832da2",
       "credentials": {
         "telegramApi": {
@@ -222,7 +222,7 @@
         448
       ],
       "id": "8875e7d2-4f5d-4a1f-8aba-8d6bdf960137",
-      "name": "Send a text message2",
+      "name": "Notificar rechazo",
       "webhookId": "f5ffb31d-ff02-444b-a4b9-4a0e6a832da2",
       "credentials": {
         "telegramApi": {
@@ -251,15 +251,15 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "observaciones": "={{ $('Code in JavaScript1').item.json.razon }}",
-            "estado": "={{ $('Code in JavaScript1').item.json.veredicto }}",
-            "nombre": "={{ $('Webhook1').item.json.body['Nombre completo'] }}",
-            "descripcion": "={{ $('Webhook1').item.json.body['Descripción del motivo'] }}",
-            "motivo": "={{ $('Webhook1').item.json.body['Motivo de inasistencia'] }}",
-            "fecha": "={{ $('Webhook1').item.json.body.fecha }}",
-            "telegram_ID": "={{ $('Webhook1').item.json.body.telegram_id }}",
-            "correo": "={{ $('Webhook1').item.json.body.correo }}",
-            "estudiante_ID": "={{ $('Webhook1').item.json.body.estudiante_id }}"
+            "observaciones": "={{ $('Normalizar respuesta IA').item.json.razon }}",
+            "estado": "={{ $('Normalizar respuesta IA').item.json.veredicto }}",
+            "nombre": "={{ $('Webhook Formulario').item.json.body['Nombre completo'] }}",
+            "descripcion": "={{ $('Webhook Formulario').item.json.body['Descripción del motivo'] }}",
+            "motivo": "={{ $('Webhook Formulario').item.json.body['Motivo de inasistencia'] }}",
+            "fecha": "={{ $('Webhook Formulario').item.json.body.fecha }}",
+            "telegram_ID": "={{ $('Webhook Formulario').item.json.body.telegram_id }}",
+            "correo": "={{ $('Webhook Formulario').item.json.body.correo }}",
+            "estudiante_ID": "={{ $('Webhook Formulario').item.json.body.estudiante_id }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -357,7 +357,7 @@
         0
       ],
       "id": "20c7eb9a-7289-4006-aec5-2feca4c99b3d",
-      "name": "Append row in sheet",
+      "name": "Registrar aprobado",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "hpzobAPVQNFcXILW",
@@ -387,13 +387,13 @@
           "value": {
             "observaciones": "={{ $json.razon }}",
             "estado": "=En revisión",
-            "nombre": "={{ $('Webhook1').item.json.body['Nombre completo'] }}",
-            "descripcion": "={{ $('Webhook1').item.json.body['Descripción del motivo'] }}",
-            "motivo": "={{ $('Webhook1').item.json.body['Motivo de inasistencia'] }}",
-            "fecha": "={{ $('Webhook1').item.json.body.fecha }}",
-            "telegram_ID": "={{ $('Webhook1').item.json.body.telegram_id }}",
-            "correo": "={{ $('Webhook1').item.json.body.correo }}",
-            "estudiante_ID": "={{ $('Webhook1').item.json.body.estudiante_id }}"
+            "nombre": "={{ $('Webhook Formulario').item.json.body['Nombre completo'] }}",
+            "descripcion": "={{ $('Webhook Formulario').item.json.body['Descripción del motivo'] }}",
+            "motivo": "={{ $('Webhook Formulario').item.json.body['Motivo de inasistencia'] }}",
+            "fecha": "={{ $('Webhook Formulario').item.json.body.fecha }}",
+            "telegram_ID": "={{ $('Webhook Formulario').item.json.body.telegram_id }}",
+            "correo": "={{ $('Webhook Formulario').item.json.body.correo }}",
+            "estudiante_ID": "={{ $('Webhook Formulario').item.json.body.estudiante_id }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -491,7 +491,7 @@
         224
       ],
       "id": "45932084-94de-4f46-aec6-072319a8927f",
-      "name": "Append row in sheet1",
+      "name": "Registrar en revisión",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "hpzobAPVQNFcXILW",
@@ -521,13 +521,13 @@
           "value": {
             "observaciones": "=Documentación ilegible o inconsistente con la solicitud.",
             "estado": "=Rechazado (Baja Confianza)",
-            "nombre": "={{ $('Webhook1').item.json.body['Nombre completo'] }}",
-            "descripcion": "={{ $('Webhook1').item.json.body['Descripción del motivo'] }}",
-            "motivo": "={{ $('Webhook1').item.json.body['Motivo de inasistencia'] }}",
-            "fecha": "={{ $('Webhook1').item.json.body.fecha }}",
-            "telegram_ID": "={{ $('Webhook1').item.json.body.telegram_id }}",
-            "correo": "={{ $('Webhook1').item.json.body.correo }}",
-            "estudiante_ID": "={{ $('Webhook1').item.json.body.estudiante_id }}"
+            "nombre": "={{ $('Webhook Formulario').item.json.body['Nombre completo'] }}",
+            "descripcion": "={{ $('Webhook Formulario').item.json.body['Descripción del motivo'] }}",
+            "motivo": "={{ $('Webhook Formulario').item.json.body['Motivo de inasistencia'] }}",
+            "fecha": "={{ $('Webhook Formulario').item.json.body.fecha }}",
+            "telegram_ID": "={{ $('Webhook Formulario').item.json.body.telegram_id }}",
+            "correo": "={{ $('Webhook Formulario').item.json.body.correo }}",
+            "estudiante_ID": "={{ $('Webhook Formulario').item.json.body.estudiante_id }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -625,7 +625,7 @@
         448
       ],
       "id": "eee052dd-42ca-48e3-860c-2a5509c663e1",
-      "name": "Append row in sheet2",
+      "name": "Registrar rechazado",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "hpzobAPVQNFcXILW",
@@ -715,7 +715,7 @@
         896
       ],
       "id": "35ccffeb-e2ae-4c26-9c64-e84242f811c5",
-      "name": "Switch1"
+      "name": "Clasificar mensaje"
     },
     {
       "parameters": {
@@ -730,7 +730,7 @@
         704
       ],
       "id": "bd543730-23cb-494c-b3d8-259c02a2b253",
-      "name": "Send a text message3",
+      "name": "Pedir ID de estudiante",
       "webhookId": "1286ec33-246a-4715-b9f4-5f11f6265d23",
       "credentials": {
         "telegramApi": {
@@ -752,7 +752,7 @@
         1168
       ],
       "id": "54af7e7d-338d-432a-96b7-a2fb6d4b3148",
-      "name": "Send a text message4",
+      "name": "Responder no encontrado",
       "webhookId": "1286ec33-246a-4715-b9f4-5f11f6265d23",
       "credentials": {
         "telegramApi": {
@@ -792,12 +792,12 @@
         1104
       ],
       "id": "1a7e07c8-803e-4a4b-90f6-258b9a5f08d1",
-      "name": "If"
+      "name": "¿Solicitud encontrada?"
     },
     {
       "parameters": {
         "chatId": "=6878861034",
-        "text": "=¡Hola! El estado de tu solicitud es:  {{ $('Get row(s) in sheet').item.json.estado }}.\nObservaciones: {{ $('Get row(s) in sheet').item.json.observaciones }}",
+        "text": "=¡Hola! El estado de tu solicitud es:  {{ $('Buscar solicitud').item.json.estado }}.\nObservaciones: {{ $('Buscar solicitud').item.json.observaciones }}",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -807,7 +807,7 @@
         928
       ],
       "id": "a310a574-2a57-401e-b58f-5b7963fa69ea",
-      "name": "Send a text message5",
+      "name": "Responder estado",
       "webhookId": "1286ec33-246a-4715-b9f4-5f11f6265d23",
       "credentials": {
         "telegramApi": {
@@ -849,7 +849,7 @@
         1088
       ],
       "id": "8ea6247a-8e31-44c2-96d0-951e1b446d09",
-      "name": "Get row(s) in sheet",
+      "name": "Buscar solicitud",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "hpzobAPVQNFcXILW",
@@ -959,7 +959,7 @@
         1728
       ],
       "id": "e3016961-2a4b-4acf-8ff2-4bcd18feeff5",
-      "name": "Conteo de solicitudes"
+      "name": "Construir reporte semanal"
     },
     {
       "parameters": {
@@ -995,7 +995,7 @@
         1728
       ],
       "id": "6bc42658-9d8b-4518-af35-04c08f387cd4",
-      "name": "Obtener informacion",
+      "name": "Obtener solicitudes",
       "retryOnFail": false,
       "credentials": {
         "googleSheetsOAuth2Api": {
@@ -1025,107 +1025,107 @@
         1728
       ],
       "id": "9bdf7de5-2eed-4105-a643-2fc1d45c5e02",
-      "name": "Horario"
+      "name": "Cada viernes 17:00"
     }
   ],
   "pinData": {},
   "connections": {
-    "Webhook1": {
+    "Webhook Formulario": {
       "main": [
         [
           {
-            "node": "Basic LLM Chain1",
+            "node": "Evaluar con IA",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Basic LLM Chain1": {
+    "Evaluar con IA": {
       "main": [
         [
           {
-            "node": "Code in JavaScript1",
+            "node": "Normalizar respuesta IA",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Google Gemini Chat Model1": {
+    "Google Gemini": {
       "ai_languageModel": [
         [
           {
-            "node": "Basic LLM Chain1",
+            "node": "Evaluar con IA",
             "type": "ai_languageModel",
             "index": 0
           }
         ]
       ]
     },
-    "Code in JavaScript1": {
+    "Normalizar respuesta IA": {
       "main": [
         [
           {
-            "node": "Switch",
+            "node": "Enrutar por veredicto",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Switch": {
+    "Enrutar por veredicto": {
       "main": [
         [
           {
-            "node": "Append row in sheet",
+            "node": "Registrar aprobado",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Append row in sheet1",
+            "node": "Registrar en revisión",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Append row in sheet2",
+            "node": "Registrar rechazado",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Append row in sheet": {
+    "Registrar aprobado": {
       "main": [
         [
           {
-            "node": "Send a text message",
+            "node": "Notificar aprobado",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Append row in sheet1": {
+    "Registrar en revisión": {
       "main": [
         [
           {
-            "node": "Send a text message1",
+            "node": "Alertar revisión manual (admin)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Append row in sheet2": {
+    "Registrar rechazado": {
       "main": [
         [
           {
-            "node": "Send a text message2",
+            "node": "Notificar rechazo",
             "type": "main",
             "index": 0
           }
@@ -1136,54 +1136,54 @@
       "main": [
         [
           {
-            "node": "Switch1",
+            "node": "Clasificar mensaje",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Switch1": {
+    "Clasificar mensaje": {
       "main": [
         [
           {
-            "node": "Send a text message3",
+            "node": "Pedir ID de estudiante",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Get row(s) in sheet",
+            "node": "Buscar solicitud",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "If": {
+    "¿Solicitud encontrada?": {
       "main": [
         [
           {
-            "node": "Send a text message5",
+            "node": "Responder estado",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Send a text message4",
+            "node": "Responder no encontrado",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Get row(s) in sheet": {
+    "Buscar solicitud": {
       "main": [
         [
           {
-            "node": "If",
+            "node": "¿Solicitud encontrada?",
             "type": "main",
             "index": 0
           }
@@ -1230,7 +1230,7 @@
         ]
       ]
     },
-    "Conteo de solicitudes": {
+    "Construir reporte semanal": {
       "main": [
         [
           {
@@ -1241,22 +1241,22 @@
         ]
       ]
     },
-    "Obtener informacion": {
+    "Obtener solicitudes": {
       "main": [
         [
           {
-            "node": "Conteo de solicitudes",
+            "node": "Construir reporte semanal",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Horario": {
+    "Cada viernes 17:00": {
       "main": [
         [
           {
-            "node": "Obtener informacion",
+            "node": "Obtener solicitudes",
             "type": "main",
             "index": 0
           }
