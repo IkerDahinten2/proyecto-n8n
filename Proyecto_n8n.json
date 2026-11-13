@@ -14,13 +14,13 @@
         288
       ],
       "id": "c110e4ab-ddef-4201-98a1-5aa4b42d701e",
-      "name": "Webhook1",
+      "name": "Webhook Formulario",
       "webhookId": "0e0db6af-ba64-4d04-91ab-e057c2e017fa"
     },
     {
       "parameters": {
         "promptType": "define",
-        "text": "Analiza la siguiente solicitud de inasistencia evaluando la consistencia entre los datos del formulario y la imagen adjunta:\n\n- Alumno: {{ $json.body[\"Nombre completo\"] }}\n- Motivo: {{ $json.body[\"Motivo de inasistencia\"] }}\n- Descripción: {{ $json.body[\"Descripción del motivo\"] }}\n\nDevuelve únicamente un objeto JSON con la siguiente estructura, sin agregar texto markdown, bloques de código (```json), ni introducciones:\n{\"veredicto\": \"Aprobado o Rechazado o Dudoso\", \"nivel_confianza\": 85, \"razon\": \"Breve explicación del veredicto\"}",
+        "text": "Analiza la siguiente solicitud de inasistencia evaluando la consistencia entre los datos del formulario y la imagen adjunta:\n\n- Alumno: {{ $json.body[\"Nombre completo\"] }}\n- Motivo: {{ $json.body[\"Motivo de inasistencia\"] }}\n- Descripción: {{ $json.body[\"Descripción del motivo\"] }}\n\nDevuelve únicamente un objeto JSON con la siguiente estructura, sin agregar texto markdown, bloques de código (```json), ni introducciones:\n{\"veredicto\": \"Aprobado o Rechazado o Dudoso\", \"nivel_confianza\": 85, \"razon\": \"Breve explicación del veredicto\"}\n\nReglas: \"nivel_confianza\" es un número entero entre 0 y 100. Usa \"Dudoso\" si la evidencia no es suficiente.",
         "hasOutputParser": true,
         "messages": {
           "messageValues": [
@@ -44,7 +44,7 @@
         288
       ],
       "id": "f3e15c53-f30b-4cc7-a7a0-33c67d721a17",
-      "name": "Basic LLM Chain1",
+      "name": "Evaluar con IA",
       "retryOnFail": true,
       "waitBetweenTries": 2000
     },
@@ -60,7 +60,7 @@
         512
       ],
       "id": "0de96c2e-9a4a-4541-9e12-52a59f3aa885",
-      "name": "Google Gemini Chat Model1",
+      "name": "Google Gemini",
       "credentials": {
         "googlePalmApi": {
           "id": "imxEn6x5R8TFcJTc",
@@ -71,7 +71,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// 1. Capturamos la respuesta de la IA\nlet textoIA = $input.item.json.text || $input.item.json.output || \"\";\n\n// 2. Si ya es un objeto directo, lo estandarizamos\nif (typeof textoIA === 'object') {\n  return {\n    veredicto: textoIA.veredicto || \"Dudoso\",\n    nivel_confianza: parseFloat(textoIA.nivel_confianza || 0),\n    razon: textoIA.razon || \"Sin detalles\"\n  };\n}\n\n// 3. Limpieza de bloques de código markdown y espacios\ntextoIA = textoIA.trim();\ntextoIA = textoIA.replace(/^```json\\s*/i, \"\").replace(/```$/, \"\").trim();\n\n// 4. Si quedó vacío, devolvemos un estado seguro para el Switch (caerá en revisión manual)\nif (!textoIA) {\n  return {\n    veredicto: \"Dudoso\",\n    nivel_confianza: 0,\n    razon: \"El nodo de la IA no generó texto procesable.\"\n  };\n}\n\n// 5. Parseo seguro a JSON\ntry {\n  let datosParseados = JSON.parse(textoIA);\n  return {\n    veredicto: datosParseados.veredicto || \"Dudoso\",\n    nivel_confianza: parseFloat(datosParseados.nivel_confianza || 0),\n    razon: datosParseados.razon || \"Sin detalles\"\n  };\n} catch (e) {\n  // Intento de rescate si la IA metió texto plano decorativo alrededor del JSON\n  try {\n    let inicioJSON = textoIA.indexOf('{');\n    let finJSON = textoIA.lastIndexOf('}');\n    if (inicioJSON !== -1 && finJSON !== -1) {\n      let jsonLimpio = textoIA.substring(inicioJSON, finJSON + 1);\n      let datosParseadosMano = JSON.parse(jsonLimpio);\n      return {\n        veredicto: datosParseadosMano.veredicto || \"Dudoso\",\n        nivel_confianza: parseFloat(datosParseadosMano.nivel_confianza || 0),\n        razon: datosParseadosMano.razon || \"Sin detalles\"\n      };\n    }\n  } catch (err) {}\n\n  // Si fallan todos los rescates, enviamos un estado seguro\n  return {\n    veredicto: \"Dudoso\",\n    nivel_confianza: 0,\n    razon: \"Error de formato en la respuesta de la IA: \" + textoIA\n  };\n}"
+        "jsCode": "// Normaliza la respuesta del LLM a { veredicto, nivel_confianza, razon }.\n// Si algo falla devuelve un estado seguro (\"Dudoso\", 0) que termina en revisión manual.\nconst VEREDICTOS = ['Aprobado', 'Rechazado', 'Dudoso'];\nconst estadoSeguro = (razon) => ({ veredicto: 'Dudoso', nivel_confianza: 0, razon });\n\nfunction normalizar(datos) {\n  const recibido = String(datos.veredicto || '').trim().toLowerCase();\n  const veredicto = VEREDICTOS.find(v => v.toLowerCase() === recibido) || 'Dudoso';\n  let confianza = Number.parseFloat(datos.nivel_confianza);\n  if (!Number.isFinite(confianza)) confianza = 0;\n  confianza = Math.min(100, Math.max(0, confianza));\n  const razon = String(datos.razon || 'Sin detalles').trim().slice(0, 500);\n  return { veredicto, nivel_confianza: confianza, razon };\n}\n\nconst salida = $input.item.json.text ?? $input.item.json.output ?? '';\nif (salida && typeof salida === 'object') return normalizar(salida);\n\n// Quita bloques de código markdown que algunos LLM agregan\nconst texto = String(salida).replace(/```(?:json)?/gi, '').trim();\nif (!texto) return estadoSeguro('La IA no generó una respuesta procesable.');\n\nconst inicio = texto.indexOf('{');\nconst fin = texto.lastIndexOf('}');\nif (inicio === -1 || fin <= inicio) return estadoSeguro('La respuesta de la IA no contiene un JSON válido.');\n\ntry {\n  return normalizar(JSON.parse(texto.slice(inicio, fin + 1)));\n} catch (error) {\n  return estadoSeguro('Error de formato en la respuesta de la IA.');\n}"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -80,7 +80,7 @@
         288
       ],
       "id": "c263350a-20dd-4e97-93e4-3c64d80bbb19",
-      "name": "Code in JavaScript1"
+      "name": "Normalizar respuesta IA"
     },
     {
       "parameters": {
@@ -96,17 +96,20 @@
                 },
                 "conditions": [
                   {
-                    "id": "096d6b41-4574-405c-a666-2248b1234042",
-                    "leftValue": "={{ $json.nivel_confianza }}",
-                    "rightValue": 80,
+                    "id": "73cd6afe-e294-44f9-949b-cc601196948a",
+                    "leftValue": "={{ $json.nivel_confianza >= 80 && $json.veredicto === 'Aprobado' }}",
+                    "rightValue": "",
                     "operator": {
-                      "type": "number",
-                      "operation": "gte"
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
                     }
                   }
                 ],
                 "combinator": "and"
-              }
+              },
+              "renameOutput": true,
+              "outputKey": "Aprobado"
             },
             {
               "conditions": {
@@ -118,17 +121,20 @@
                 },
                 "conditions": [
                   {
-                    "id": "e87d42c6-5ea3-4c15-841b-4b0cb4c18168",
-                    "leftValue": "={{ $json.nivel_confianza }}",
-                    "rightValue": 80,
+                    "id": "2510c259-0531-49e9-8f57-f30dd9374268",
+                    "leftValue": "={{ !($json.nivel_confianza >= 80 && ['Aprobado', 'Rechazado'].includes($json.veredicto)) }}",
+                    "rightValue": "",
                     "operator": {
-                      "type": "number",
-                      "operation": "lte"
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
                     }
                   }
                 ],
                 "combinator": "and"
-              }
+              },
+              "renameOutput": true,
+              "outputKey": "Revisión manual"
             },
             {
               "conditions": {
@@ -140,17 +146,20 @@
                 },
                 "conditions": [
                   {
-                    "id": "479eb447-fc45-4147-9847-92ea134665cb",
-                    "leftValue": "={{ $json.nivel_confianza }}",
-                    "rightValue": 40,
+                    "id": "bbbd5e2f-f2e2-49e3-a8c7-cdfc1496c061",
+                    "leftValue": "={{ $json.nivel_confianza >= 80 && $json.veredicto === 'Rechazado' }}",
+                    "rightValue": "",
                     "operator": {
-                      "type": "number",
-                      "operation": "gte"
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
                     }
                   }
                 ],
                 "combinator": "and"
-              }
+              },
+              "renameOutput": true,
+              "outputKey": "Rechazado"
             }
           ]
         },
@@ -163,12 +172,12 @@
         272
       ],
       "id": "08715316-108b-4ff0-9145-bc4895d2bb4a",
-      "name": "Switch"
+      "name": "Enrutar por veredicto"
     },
     {
       "parameters": {
-        "chatId": "6878861034",
-        "text": "=Hola, tu solicitud de justificación ha sido procesada automáticamente.  Veredicto: {{ $json.estado }} Razón: {{ $json.observaciones }}",
+        "chatId": "={{ $('Webhook Formulario').item.json.body.telegram_id }}",
+        "text": "=Hola {{ $('Webhook Formulario').item.json.body['Nombre completo'] }}, tu solicitud de justificación del {{ $('Webhook Formulario').item.json.body.fecha }} fue APROBADA.\nRazón: {{ $('Normalizar respuesta IA').item.json.razon }}",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -178,7 +187,7 @@
         0
       ],
       "id": "cd627007-b60a-432d-a902-69ec7c92554a",
-      "name": "Send a text message",
+      "name": "Notificar aprobado",
       "webhookId": "f5ffb31d-ff02-444b-a4b9-4a0e6a832da2",
       "credentials": {
         "telegramApi": {
@@ -190,7 +199,7 @@
     {
       "parameters": {
         "chatId": "6878861034",
-        "text": "=⚠️ ALERTA: Se requiere revisión manual.\nEl alumno {{ $('Webhook1').item.json.body['Nombre completo'] }} subió una justificación pero el sistema determinó duda.\nRazón de la IA: {{ $json.observaciones }}",
+        "text": "=⚠️ Revisión manual requerida\nEstudiante: {{ $('Webhook Formulario').item.json.body['Nombre completo'] }} ({{ $('Webhook Formulario').item.json.body.estudiante_id }})\nMotivo: {{ $('Webhook Formulario').item.json.body['Motivo de inasistencia'] }}\nVeredicto IA: {{ $('Normalizar respuesta IA').item.json.veredicto }} ({{ $('Normalizar respuesta IA').item.json.nivel_confianza }}%)\nRazón: {{ $('Normalizar respuesta IA').item.json.razon }}",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -200,7 +209,7 @@
         224
       ],
       "id": "d1758d43-fdf2-4f94-9bfd-8fe66cd5f879",
-      "name": "Send a text message1",
+      "name": "Alertar revisión manual (admin)",
       "webhookId": "f5ffb31d-ff02-444b-a4b9-4a0e6a832da2",
       "credentials": {
         "telegramApi": {
@@ -211,8 +220,8 @@
     },
     {
       "parameters": {
-        "chatId": "6878861034",
-        "text": "=Hola. Tu solicitud de justificación ha sido rechazada automáticamente por el sistema debido a que la documentación adjunta no es legible, no coincide con los datos ingresados o no cumple con los requisitos mínimos. Por favor, vuelve a iniciar el proceso con un comprobante válido.",
+        "chatId": "={{ $('Webhook Formulario').item.json.body.telegram_id }}",
+        "text": "=Hola {{ $('Webhook Formulario').item.json.body['Nombre completo'] }}, tu solicitud de justificación del {{ $('Webhook Formulario').item.json.body.fecha }} fue RECHAZADA.\nRazón: {{ $('Normalizar respuesta IA').item.json.razon }}\nSi consideras que es un error, envía una nueva solicitud con un comprobante válido.",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -222,7 +231,7 @@
         448
       ],
       "id": "8875e7d2-4f5d-4a1f-8aba-8d6bdf960137",
-      "name": "Send a text message2",
+      "name": "Notificar rechazo",
       "webhookId": "f5ffb31d-ff02-444b-a4b9-4a0e6a832da2",
       "credentials": {
         "telegramApi": {
@@ -251,15 +260,16 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "observaciones": "={{ $('Code in JavaScript1').item.json.razon }}",
-            "estado": "={{ $('Code in JavaScript1').item.json.veredicto }}",
-            "nombre": "={{ $('Webhook1').item.json.body['Nombre completo'] }}",
-            "descripcion": "={{ $('Webhook1').item.json.body['Descripción del motivo'] }}",
-            "motivo": "={{ $('Webhook1').item.json.body['Motivo de inasistencia'] }}",
-            "fecha": "={{ $('Webhook1').item.json.body.fecha }}",
-            "telegram_ID": "={{ $('Webhook1').item.json.body.telegram_id }}",
-            "correo": "={{ $('Webhook1').item.json.body.correo }}",
-            "estudiante_ID": "={{ $('Webhook1').item.json.body.estudiante_id }}"
+            "observaciones": "={{ $('Normalizar respuesta IA').item.json.razon }}",
+            "estado": "Aprobado",
+            "nombre": "={{ $('Webhook Formulario').item.json.body['Nombre completo'] }}",
+            "descripcion": "={{ $('Webhook Formulario').item.json.body['Descripción del motivo'] }}",
+            "motivo": "={{ $('Webhook Formulario').item.json.body['Motivo de inasistencia'] }}",
+            "fecha": "={{ $('Webhook Formulario').item.json.body.fecha }}",
+            "telegram_ID": "={{ $('Webhook Formulario').item.json.body.telegram_id }}",
+            "correo": "={{ $('Webhook Formulario').item.json.body.correo }}",
+            "estudiante_ID": "={{ $('Webhook Formulario').item.json.body.estudiante_id }}",
+            "fecha_registro": "={{ $now.toISO() }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -338,6 +348,15 @@
             {
               "id": "observaciones",
               "displayName": "observaciones",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fecha_registro",
+              "displayName": "fecha_registro",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -357,7 +376,7 @@
         0
       ],
       "id": "20c7eb9a-7289-4006-aec5-2feca4c99b3d",
-      "name": "Append row in sheet",
+      "name": "Registrar aprobado",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "hpzobAPVQNFcXILW",
@@ -385,15 +404,16 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "observaciones": "={{ $json.razon }}",
-            "estado": "=En revisión",
-            "nombre": "={{ $('Webhook1').item.json.body['Nombre completo'] }}",
-            "descripcion": "={{ $('Webhook1').item.json.body['Descripción del motivo'] }}",
-            "motivo": "={{ $('Webhook1').item.json.body['Motivo de inasistencia'] }}",
-            "fecha": "={{ $('Webhook1').item.json.body.fecha }}",
-            "telegram_ID": "={{ $('Webhook1').item.json.body.telegram_id }}",
-            "correo": "={{ $('Webhook1').item.json.body.correo }}",
-            "estudiante_ID": "={{ $('Webhook1').item.json.body.estudiante_id }}"
+            "observaciones": "={{ $('Normalizar respuesta IA').item.json.razon }}",
+            "estado": "En revisión",
+            "nombre": "={{ $('Webhook Formulario').item.json.body['Nombre completo'] }}",
+            "descripcion": "={{ $('Webhook Formulario').item.json.body['Descripción del motivo'] }}",
+            "motivo": "={{ $('Webhook Formulario').item.json.body['Motivo de inasistencia'] }}",
+            "fecha": "={{ $('Webhook Formulario').item.json.body.fecha }}",
+            "telegram_ID": "={{ $('Webhook Formulario').item.json.body.telegram_id }}",
+            "correo": "={{ $('Webhook Formulario').item.json.body.correo }}",
+            "estudiante_ID": "={{ $('Webhook Formulario').item.json.body.estudiante_id }}",
+            "fecha_registro": "={{ $now.toISO() }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -472,6 +492,15 @@
             {
               "id": "observaciones",
               "displayName": "observaciones",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fecha_registro",
+              "displayName": "fecha_registro",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -491,7 +520,7 @@
         224
       ],
       "id": "45932084-94de-4f46-aec6-072319a8927f",
-      "name": "Append row in sheet1",
+      "name": "Registrar en revisión",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "hpzobAPVQNFcXILW",
@@ -519,15 +548,16 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "observaciones": "=Documentación ilegible o inconsistente con la solicitud.",
-            "estado": "=Rechazado (Baja Confianza)",
-            "nombre": "={{ $('Webhook1').item.json.body['Nombre completo'] }}",
-            "descripcion": "={{ $('Webhook1').item.json.body['Descripción del motivo'] }}",
-            "motivo": "={{ $('Webhook1').item.json.body['Motivo de inasistencia'] }}",
-            "fecha": "={{ $('Webhook1').item.json.body.fecha }}",
-            "telegram_ID": "={{ $('Webhook1').item.json.body.telegram_id }}",
-            "correo": "={{ $('Webhook1').item.json.body.correo }}",
-            "estudiante_ID": "={{ $('Webhook1').item.json.body.estudiante_id }}"
+            "observaciones": "={{ $('Normalizar respuesta IA').item.json.razon }}",
+            "estado": "Rechazado",
+            "nombre": "={{ $('Webhook Formulario').item.json.body['Nombre completo'] }}",
+            "descripcion": "={{ $('Webhook Formulario').item.json.body['Descripción del motivo'] }}",
+            "motivo": "={{ $('Webhook Formulario').item.json.body['Motivo de inasistencia'] }}",
+            "fecha": "={{ $('Webhook Formulario').item.json.body.fecha }}",
+            "telegram_ID": "={{ $('Webhook Formulario').item.json.body.telegram_id }}",
+            "correo": "={{ $('Webhook Formulario').item.json.body.correo }}",
+            "estudiante_ID": "={{ $('Webhook Formulario').item.json.body.estudiante_id }}",
+            "fecha_registro": "={{ $now.toISO() }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -611,6 +641,15 @@
               "display": true,
               "type": "string",
               "canBeUsedToMatch": true
+            },
+            {
+              "id": "fecha_registro",
+              "displayName": "fecha_registro",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
             }
           ],
           "attemptToConvertTypes": false,
@@ -625,7 +664,7 @@
         448
       ],
       "id": "eee052dd-42ca-48e3-860c-2a5509c663e1",
-      "name": "Append row in sheet2",
+      "name": "Registrar rechazado",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "hpzobAPVQNFcXILW",
@@ -670,17 +709,19 @@
                 },
                 "conditions": [
                   {
-                    "leftValue": "=solicitud {{ $json.message.text }}",
-                    "rightValue": "hola",
+                    "id": "862e946c-f622-459c-86c9-b843ff1151c9",
+                    "leftValue": "={{ ($json.message.text || '').trim().toLowerCase() }}",
+                    "rightValue": "^(/start|hola|buen)",
                     "operator": {
                       "type": "string",
-                      "operation": "contains"
-                    },
-                    "id": "7e7811e3-14a2-41ac-88f6-7afc83e71c97"
+                      "operation": "regex"
+                    }
                   }
                 ],
                 "combinator": "and"
-              }
+              },
+              "renameOutput": true,
+              "outputKey": "Saludo"
             },
             {
               "conditions": {
@@ -692,9 +733,9 @@
                 },
                 "conditions": [
                   {
-                    "id": "bf3fab33-df4d-40ac-a6ec-9179c3c8e856",
-                    "leftValue": "={{ $json.message.text }}",
-                    "rightValue": "^\\d+$",
+                    "id": "fe969617-5d21-4e68-8f1c-8ff869a9cb75",
+                    "leftValue": "={{ ($json.message.text || '').trim() }}",
+                    "rightValue": "^[A-Za-z]{0,5}-?\\d{1,10}$",
                     "operator": {
                       "type": "string",
                       "operation": "regex"
@@ -702,11 +743,15 @@
                   }
                 ],
                 "combinator": "and"
-              }
+              },
+              "renameOutput": true,
+              "outputKey": "ID de estudiante"
             }
           ]
         },
-        "options": {}
+        "options": {
+          "fallbackOutput": 0
+        }
       },
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
@@ -715,12 +760,12 @@
         896
       ],
       "id": "35ccffeb-e2ae-4c26-9c64-e84242f811c5",
-      "name": "Switch1"
+      "name": "Clasificar mensaje"
     },
     {
       "parameters": {
-        "chatId": "=6878861034",
-        "text": "¡Hola! Para consultar el estado de tu trámite, por favor responde enviando únicamente tu número de ID de estudiante a continuación.",
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "¡Hola! Para consultar el estado de tu trámite, responde enviando únicamente tu ID de estudiante (por ejemplo: EST-2026).",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -730,7 +775,7 @@
         704
       ],
       "id": "bd543730-23cb-494c-b3d8-259c02a2b253",
-      "name": "Send a text message3",
+      "name": "Pedir ID de estudiante",
       "webhookId": "1286ec33-246a-4715-b9f4-5f11f6265d23",
       "credentials": {
         "telegramApi": {
@@ -741,8 +786,8 @@
     },
     {
       "parameters": {
-        "chatId": "=6878861034",
-        "text": "¡Hola! No he encontrado tu ID de estudiante, verificalo y mandame solo tu ID de estudiante, sin puntos ni comas ni texto.",
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "No encontré solicitudes con ese ID de estudiante. Verifícalo y envíalo de nuevo, sin espacios ni texto adicional.",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -752,7 +797,7 @@
         1168
       ],
       "id": "54af7e7d-338d-432a-96b7-a2fb6d4b3148",
-      "name": "Send a text message4",
+      "name": "Responder no encontrado",
       "webhookId": "1286ec33-246a-4715-b9f4-5f11f6265d23",
       "credentials": {
         "telegramApi": {
@@ -767,23 +812,25 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict",
+            "typeValidation": "loose",
             "version": 3
           },
           "conditions": [
             {
-              "id": "c5e2f429-0e15-4001-bf03-e9faa2680546",
-              "leftValue": "={{ $json.estudiante_ID }}",
-              "rightValue": 0,
+              "id": "f638d80e-b0c2-46fc-aecf-706b3b02ca3a",
+              "leftValue": "={{ $json.estado }}",
+              "rightValue": "",
               "operator": {
-                "type": "number",
-                "operation": "gt"
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
               }
             }
           ],
           "combinator": "and"
         },
-        "options": {}
+        "options": {},
+        "looseTypeValidation": true
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
@@ -792,12 +839,12 @@
         1104
       ],
       "id": "1a7e07c8-803e-4a4b-90f6-258b9a5f08d1",
-      "name": "If"
+      "name": "¿Solicitud encontrada?"
     },
     {
       "parameters": {
-        "chatId": "=6878861034",
-        "text": "=¡Hola! El estado de tu solicitud es:  {{ $('Get row(s) in sheet').item.json.estado }}.\nObservaciones: {{ $('Get row(s) in sheet').item.json.observaciones }}",
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=Estado de tu solicitud: {{ $json.estado }}\nObservaciones: {{ $json.observaciones }}",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -807,7 +854,7 @@
         928
       ],
       "id": "a310a574-2a57-401e-b58f-5b7963fa69ea",
-      "name": "Send a text message5",
+      "name": "Responder estado",
       "webhookId": "1286ec33-246a-4715-b9f4-5f11f6265d23",
       "credentials": {
         "telegramApi": {
@@ -836,7 +883,7 @@
           "values": [
             {
               "lookupColumn": "estudiante_ID",
-              "lookupValue": "={{ $('Telegram Trigger').item.json.message.text }}"
+              "lookupValue": "={{ $('Telegram Trigger').item.json.message.text.trim() }}"
             }
           ]
         },
@@ -849,108 +896,18 @@
         1088
       ],
       "id": "8ea6247a-8e31-44c2-96d0-951e1b446d09",
-      "name": "Get row(s) in sheet",
+      "name": "Buscar solicitud",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "hpzobAPVQNFcXILW",
           "name": "Google Sheets account"
         }
-      }
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 3
-          },
-          "conditions": [
-            {
-              "id": "c4ff45ff-95ce-4156-b47f-932818d6a909",
-              "leftValue": "={{ $json.fecha }}",
-              "rightValue": "={{ $json.fecha }}",
-              "operator": {
-                "type": "dateTime",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
       },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
-      "position": [
-        -608,
-        1728
-      ],
-      "id": "1e292ddf-278a-4486-93e3-419636074d71",
-      "name": "If1"
+      "alwaysOutputData": true
     },
     {
       "parameters": {
-        "chatId": "=6878861034",
-        "text": "hola",
-        "additionalFields": {}
-      },
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        16,
-        1728
-      ],
-      "id": "ac53acc7-9d36-4999-b2f1-f413696ef1fe",
-      "name": "Send a text message6",
-      "webhookId": "1286ec33-246a-4715-b9f4-5f11f6265d23",
-      "credentials": {
-        "telegramApi": {
-          "id": "OAavOYsMfJdfuBK8",
-          "name": "Telegram account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "8566d2f7-26c7-4e22-9683-32908bf80231",
-              "name": "fecha",
-              "value": "Esta semana no han habido formularios de inasistencia",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        -304,
-        1568
-      ],
-      "id": "f33aa423-73e1-4df8-bd3f-ee1bae84ec86",
-      "name": "No encontrado"
-    },
-    {
-      "parameters": {
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        -304,
-        1904
-      ],
-      "id": "3e22f739-a19e-4912-a780-39fde065a04f",
-      "name": "Reporte Semanal"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nfor (const item of $input.all()) {\n  item.json.myNewField = 1;\n}\n\nreturn $input.all();"
+        "jsCode": "// Resume las solicitudes registradas en los últimos 7 días, agrupadas por estado.\nconst DIAS = 7;\nconst hoy = new Date();\nconst desde = new Date(hoy.getTime() - DIAS * 24 * 60 * 60 * 1000);\nconst formato = (fecha) => fecha.toISOString().slice(0, 10);\n\nconst filas = $input.all().map(item => item.json).filter(fila => fila.estado);\nconst semana = filas.filter(fila => {\n  const fecha = new Date(fila.fecha_registro || fila.fecha);\n  return !Number.isNaN(fecha.getTime()) && fecha >= desde && fecha <= hoy;\n});\n\nconst conteo = semana.reduce((acc, fila) => {\n  acc[fila.estado] = (acc[fila.estado] || 0) + 1;\n  return acc;\n}, {});\n\nconst mensaje = semana.length === 0\n  ? '📊 Reporte semanal: esta semana no hubo solicitudes de inasistencia.'\n  : [\n      '📊 Reporte semanal de inasistencias',\n      `Periodo: ${formato(desde)} a ${formato(hoy)}`,\n      `Total de solicitudes: ${semana.length}`,\n      '',\n      ...Object.entries(conteo).map(([estado, total]) => `• ${estado}: ${total}`)\n    ].join('\\n');\n\nreturn [{ json: { mensaje, total: semana.length, conteo } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -959,7 +916,7 @@
         1728
       ],
       "id": "e3016961-2a4b-4acf-8ff2-4bcd18feeff5",
-      "name": "Conteo de solicitudes"
+      "name": "Construir reporte semanal"
     },
     {
       "parameters": {
@@ -977,15 +934,6 @@
           "cachedResultName": "Hoja 1",
           "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1gfPvdrvHnWJyxWgctIuzxJabhT2cFlgJwRSlYWO0q-w/edit#gid=0"
         },
-        "filtersUI": {
-          "values": [
-            {
-              "lookupColumn": "fecha",
-              "lookupValue": "2026-05-29"
-            }
-          ]
-        },
-        "combineFilters": "OR",
         "options": {}
       },
       "type": "n8n-nodes-base.googleSheets",
@@ -995,14 +943,15 @@
         1728
       ],
       "id": "6bc42658-9d8b-4518-af35-04c08f387cd4",
-      "name": "Obtener informacion",
+      "name": "Obtener solicitudes",
       "retryOnFail": false,
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "hpzobAPVQNFcXILW",
           "name": "Google Sheets account"
         }
-      }
+      },
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -1025,107 +974,154 @@
         1728
       ],
       "id": "9bdf7de5-2eed-4105-a643-2fc1d45c5e02",
-      "name": "Horario"
+      "name": "Cada viernes 17:00"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Webhook Formulario').item.json.body.telegram_id }}",
+        "text": "=Hola {{ $('Webhook Formulario').item.json.body['Nombre completo'] }}, recibimos tu solicitud de justificación del {{ $('Webhook Formulario').item.json.body.fecha }}. Está EN REVISIÓN por el personal académico; te avisaremos el resultado.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        200
+      ],
+      "id": "d3292e78-7729-4550-a8ea-dbfe54ffb66c",
+      "name": "Notificar en revisión (estudiante)",
+      "credentials": {
+        "telegramApi": {
+          "id": "OAavOYsMfJdfuBK8",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "6878861034",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -556,
+        1728
+      ],
+      "id": "8cad3963-8349-4dee-8ef6-07aebb827598",
+      "name": "Enviar reporte (admin)",
+      "credentials": {
+        "telegramApi": {
+          "id": "OAavOYsMfJdfuBK8",
+          "name": "Telegram account"
+        }
+      }
     }
   ],
   "pinData": {},
   "connections": {
-    "Webhook1": {
+    "Webhook Formulario": {
       "main": [
         [
           {
-            "node": "Basic LLM Chain1",
+            "node": "Evaluar con IA",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Basic LLM Chain1": {
+    "Evaluar con IA": {
       "main": [
         [
           {
-            "node": "Code in JavaScript1",
+            "node": "Normalizar respuesta IA",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Google Gemini Chat Model1": {
+    "Google Gemini": {
       "ai_languageModel": [
         [
           {
-            "node": "Basic LLM Chain1",
+            "node": "Evaluar con IA",
             "type": "ai_languageModel",
             "index": 0
           }
         ]
       ]
     },
-    "Code in JavaScript1": {
+    "Normalizar respuesta IA": {
       "main": [
         [
           {
-            "node": "Switch",
+            "node": "Enrutar por veredicto",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Switch": {
+    "Enrutar por veredicto": {
       "main": [
         [
           {
-            "node": "Append row in sheet",
+            "node": "Registrar aprobado",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Append row in sheet1",
+            "node": "Registrar en revisión",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Append row in sheet2",
+            "node": "Registrar rechazado",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Append row in sheet": {
+    "Registrar aprobado": {
       "main": [
         [
           {
-            "node": "Send a text message",
+            "node": "Notificar aprobado",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Append row in sheet1": {
+    "Registrar en revisión": {
       "main": [
         [
           {
-            "node": "Send a text message1",
+            "node": "Alertar revisión manual (admin)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notificar en revisión (estudiante)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Append row in sheet2": {
+    "Registrar rechazado": {
       "main": [
         [
           {
-            "node": "Send a text message2",
+            "node": "Notificar rechazo",
             "type": "main",
             "index": 0
           }
@@ -1136,127 +1132,87 @@
       "main": [
         [
           {
-            "node": "Switch1",
+            "node": "Clasificar mensaje",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Switch1": {
+    "Clasificar mensaje": {
       "main": [
         [
           {
-            "node": "Send a text message3",
+            "node": "Pedir ID de estudiante",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Get row(s) in sheet",
+            "node": "Buscar solicitud",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "If": {
+    "¿Solicitud encontrada?": {
       "main": [
         [
           {
-            "node": "Send a text message5",
+            "node": "Responder estado",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Send a text message4",
+            "node": "Responder no encontrado",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Get row(s) in sheet": {
+    "Buscar solicitud": {
       "main": [
         [
           {
-            "node": "If",
+            "node": "¿Solicitud encontrada?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "If1": {
+    "Construir reporte semanal": {
       "main": [
         [
           {
-            "node": "No encontrado",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Reporte Semanal",
+            "node": "Enviar reporte (admin)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "No encontrado": {
+    "Obtener solicitudes": {
       "main": [
         [
           {
-            "node": "Send a text message6",
+            "node": "Construir reporte semanal",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Reporte Semanal": {
+    "Cada viernes 17:00": {
       "main": [
         [
           {
-            "node": "Send a text message6",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Conteo de solicitudes": {
-      "main": [
-        [
-          {
-            "node": "If1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Obtener informacion": {
-      "main": [
-        [
-          {
-            "node": "Conteo de solicitudes",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Horario": {
-      "main": [
-        [
-          {
-            "node": "Obtener informacion",
+            "node": "Obtener solicitudes",
             "type": "main",
             "index": 0
           }
