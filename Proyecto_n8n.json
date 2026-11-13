@@ -96,7 +96,7 @@
                 },
                 "conditions": [
                   {
-                    "id": "292e8a88-0ed7-4d81-9214-c54e2fa839b3",
+                    "id": "b325bb71-1e3b-4d83-ba29-87468a775f8f",
                     "leftValue": "={{ $json.nivel_confianza >= 80 && $json.veredicto === 'Aprobado' }}",
                     "rightValue": "",
                     "operator": {
@@ -121,7 +121,7 @@
                 },
                 "conditions": [
                   {
-                    "id": "3d868780-c0ad-4f0e-89ca-e6dc277064e4",
+                    "id": "36f0397f-3969-4b6e-b457-d9ba385b0c76",
                     "leftValue": "={{ !($json.nivel_confianza >= 80 && ['Aprobado', 'Rechazado'].includes($json.veredicto)) }}",
                     "rightValue": "",
                     "operator": {
@@ -146,7 +146,7 @@
                 },
                 "conditions": [
                   {
-                    "id": "0b7c802e-cb30-4450-8c27-a4c0eb963d12",
+                    "id": "cbb8d5be-67b1-4078-a734-88a8db5077a7",
                     "leftValue": "={{ $json.nivel_confianza >= 80 && $json.veredicto === 'Rechazado' }}",
                     "rightValue": "",
                     "operator": {
@@ -709,17 +709,19 @@
                 },
                 "conditions": [
                   {
-                    "leftValue": "=solicitud {{ $json.message.text }}",
-                    "rightValue": "hola",
+                    "id": "9b1ed12b-95b7-455c-ba16-3ba01a5bde66",
+                    "leftValue": "={{ ($json.message.text || '').trim().toLowerCase() }}",
+                    "rightValue": "^(/start|hola|buen)",
                     "operator": {
                       "type": "string",
-                      "operation": "contains"
-                    },
-                    "id": "7e7811e3-14a2-41ac-88f6-7afc83e71c97"
+                      "operation": "regex"
+                    }
                   }
                 ],
                 "combinator": "and"
-              }
+              },
+              "renameOutput": true,
+              "outputKey": "Saludo"
             },
             {
               "conditions": {
@@ -731,9 +733,9 @@
                 },
                 "conditions": [
                   {
-                    "id": "bf3fab33-df4d-40ac-a6ec-9179c3c8e856",
-                    "leftValue": "={{ $json.message.text }}",
-                    "rightValue": "^\\d+$",
+                    "id": "9a096510-bf5a-49a8-8549-b08bb9bf5a4a",
+                    "leftValue": "={{ ($json.message.text || '').trim() }}",
+                    "rightValue": "^[A-Za-z]{0,5}-?\\d{1,10}$",
                     "operator": {
                       "type": "string",
                       "operation": "regex"
@@ -741,11 +743,15 @@
                   }
                 ],
                 "combinator": "and"
-              }
+              },
+              "renameOutput": true,
+              "outputKey": "ID de estudiante"
             }
           ]
         },
-        "options": {}
+        "options": {
+          "fallbackOutput": 0
+        }
       },
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
@@ -758,8 +764,8 @@
     },
     {
       "parameters": {
-        "chatId": "=6878861034",
-        "text": "¡Hola! Para consultar el estado de tu trámite, por favor responde enviando únicamente tu número de ID de estudiante a continuación.",
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "¡Hola! Para consultar el estado de tu trámite, responde enviando únicamente tu ID de estudiante (por ejemplo: EST-2026).",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -780,8 +786,8 @@
     },
     {
       "parameters": {
-        "chatId": "=6878861034",
-        "text": "¡Hola! No he encontrado tu ID de estudiante, verificalo y mandame solo tu ID de estudiante, sin puntos ni comas ni texto.",
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "No encontré solicitudes con ese ID de estudiante. Verifícalo y envíalo de nuevo, sin espacios ni texto adicional.",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -806,23 +812,25 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict",
+            "typeValidation": "loose",
             "version": 3
           },
           "conditions": [
             {
-              "id": "c5e2f429-0e15-4001-bf03-e9faa2680546",
-              "leftValue": "={{ $json.estudiante_ID }}",
-              "rightValue": 0,
+              "id": "80856a2c-11a0-4877-87d8-4606f5cdb474",
+              "leftValue": "={{ $json.estado }}",
+              "rightValue": "",
               "operator": {
-                "type": "number",
-                "operation": "gt"
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
               }
             }
           ],
           "combinator": "and"
         },
-        "options": {}
+        "options": {},
+        "looseTypeValidation": true
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
@@ -835,8 +843,8 @@
     },
     {
       "parameters": {
-        "chatId": "=6878861034",
-        "text": "=¡Hola! El estado de tu solicitud es:  {{ $('Buscar solicitud').item.json.estado }}.\nObservaciones: {{ $('Buscar solicitud').item.json.observaciones }}",
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=Estado de tu solicitud: {{ $json.estado }}\nObservaciones: {{ $json.observaciones }}",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -875,7 +883,7 @@
           "values": [
             {
               "lookupColumn": "estudiante_ID",
-              "lookupValue": "={{ $('Telegram Trigger').item.json.message.text }}"
+              "lookupValue": "={{ $('Telegram Trigger').item.json.message.text.trim() }}"
             }
           ]
         },
@@ -894,7 +902,8 @@
           "id": "hpzobAPVQNFcXILW",
           "name": "Google Sheets account"
         }
-      }
+      },
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -1078,7 +1087,7 @@
         224,
         200
       ],
-      "id": "52f95840-d316-4ac6-bba0-c266ccc21374",
+      "id": "d74d3c92-94fa-4885-bc99-ba9e2f4baf7b",
       "name": "Notificar en revisión (estudiante)",
       "credentials": {
         "telegramApi": {
