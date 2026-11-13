@@ -20,7 +20,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "Analiza la siguiente solicitud de inasistencia evaluando la consistencia entre los datos del formulario y la imagen adjunta:\n\n- Alumno: {{ $json.body[\"Nombre completo\"] }}\n- Motivo: {{ $json.body[\"Motivo de inasistencia\"] }}\n- Descripción: {{ $json.body[\"Descripción del motivo\"] }}\n\nDevuelve únicamente un objeto JSON con la siguiente estructura, sin agregar texto markdown, bloques de código (```json), ni introducciones:\n{\"veredicto\": \"Aprobado o Rechazado o Dudoso\", \"nivel_confianza\": 85, \"razon\": \"Breve explicación del veredicto\"}",
+        "text": "Analiza la siguiente solicitud de inasistencia evaluando la consistencia entre los datos del formulario y la imagen adjunta:\n\n- Alumno: {{ $json.body[\"Nombre completo\"] }}\n- Motivo: {{ $json.body[\"Motivo de inasistencia\"] }}\n- Descripción: {{ $json.body[\"Descripción del motivo\"] }}\n\nDevuelve únicamente un objeto JSON con la siguiente estructura, sin agregar texto markdown, bloques de código (```json), ni introducciones:\n{\"veredicto\": \"Aprobado o Rechazado o Dudoso\", \"nivel_confianza\": 85, \"razon\": \"Breve explicación del veredicto\"}\n\nReglas: \"nivel_confianza\" es un número entero entre 0 y 100. Usa \"Dudoso\" si la evidencia no es suficiente.",
         "hasOutputParser": true,
         "messages": {
           "messageValues": [
@@ -71,7 +71,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// 1. Capturamos la respuesta de la IA\nlet textoIA = $input.item.json.text || $input.item.json.output || \"\";\n\n// 2. Si ya es un objeto directo, lo estandarizamos\nif (typeof textoIA === 'object') {\n  return {\n    veredicto: textoIA.veredicto || \"Dudoso\",\n    nivel_confianza: parseFloat(textoIA.nivel_confianza || 0),\n    razon: textoIA.razon || \"Sin detalles\"\n  };\n}\n\n// 3. Limpieza de bloques de código markdown y espacios\ntextoIA = textoIA.trim();\ntextoIA = textoIA.replace(/^```json\\s*/i, \"\").replace(/```$/, \"\").trim();\n\n// 4. Si quedó vacío, devolvemos un estado seguro para el Switch (caerá en revisión manual)\nif (!textoIA) {\n  return {\n    veredicto: \"Dudoso\",\n    nivel_confianza: 0,\n    razon: \"El nodo de la IA no generó texto procesable.\"\n  };\n}\n\n// 5. Parseo seguro a JSON\ntry {\n  let datosParseados = JSON.parse(textoIA);\n  return {\n    veredicto: datosParseados.veredicto || \"Dudoso\",\n    nivel_confianza: parseFloat(datosParseados.nivel_confianza || 0),\n    razon: datosParseados.razon || \"Sin detalles\"\n  };\n} catch (e) {\n  // Intento de rescate si la IA metió texto plano decorativo alrededor del JSON\n  try {\n    let inicioJSON = textoIA.indexOf('{');\n    let finJSON = textoIA.lastIndexOf('}');\n    if (inicioJSON !== -1 && finJSON !== -1) {\n      let jsonLimpio = textoIA.substring(inicioJSON, finJSON + 1);\n      let datosParseadosMano = JSON.parse(jsonLimpio);\n      return {\n        veredicto: datosParseadosMano.veredicto || \"Dudoso\",\n        nivel_confianza: parseFloat(datosParseadosMano.nivel_confianza || 0),\n        razon: datosParseadosMano.razon || \"Sin detalles\"\n      };\n    }\n  } catch (err) {}\n\n  // Si fallan todos los rescates, enviamos un estado seguro\n  return {\n    veredicto: \"Dudoso\",\n    nivel_confianza: 0,\n    razon: \"Error de formato en la respuesta de la IA: \" + textoIA\n  };\n}"
+        "jsCode": "// Normaliza la respuesta del LLM a { veredicto, nivel_confianza, razon }.\n// Si algo falla devuelve un estado seguro (\"Dudoso\", 0) que termina en revisión manual.\nconst VEREDICTOS = ['Aprobado', 'Rechazado', 'Dudoso'];\nconst estadoSeguro = (razon) => ({ veredicto: 'Dudoso', nivel_confianza: 0, razon });\n\nfunction normalizar(datos) {\n  const recibido = String(datos.veredicto || '').trim().toLowerCase();\n  const veredicto = VEREDICTOS.find(v => v.toLowerCase() === recibido) || 'Dudoso';\n  let confianza = Number.parseFloat(datos.nivel_confianza);\n  if (!Number.isFinite(confianza)) confianza = 0;\n  confianza = Math.min(100, Math.max(0, confianza));\n  const razon = String(datos.razon || 'Sin detalles').trim().slice(0, 500);\n  return { veredicto, nivel_confianza: confianza, razon };\n}\n\nconst salida = $input.item.json.text ?? $input.item.json.output ?? '';\nif (salida && typeof salida === 'object') return normalizar(salida);\n\n// Quita bloques de código markdown que algunos LLM agregan\nconst texto = String(salida).replace(/```(?:json)?/gi, '').trim();\nif (!texto) return estadoSeguro('La IA no generó una respuesta procesable.');\n\nconst inicio = texto.indexOf('{');\nconst fin = texto.lastIndexOf('}');\nif (inicio === -1 || fin <= inicio) return estadoSeguro('La respuesta de la IA no contiene un JSON válido.');\n\ntry {\n  return normalizar(JSON.parse(texto.slice(inicio, fin + 1)));\n} catch (error) {\n  return estadoSeguro('Error de formato en la respuesta de la IA.');\n}"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -96,17 +96,20 @@
                 },
                 "conditions": [
                   {
-                    "id": "096d6b41-4574-405c-a666-2248b1234042",
-                    "leftValue": "={{ $json.nivel_confianza }}",
-                    "rightValue": 80,
+                    "id": "292e8a88-0ed7-4d81-9214-c54e2fa839b3",
+                    "leftValue": "={{ $json.nivel_confianza >= 80 && $json.veredicto === 'Aprobado' }}",
+                    "rightValue": "",
                     "operator": {
-                      "type": "number",
-                      "operation": "gte"
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
                     }
                   }
                 ],
                 "combinator": "and"
-              }
+              },
+              "renameOutput": true,
+              "outputKey": "Aprobado"
             },
             {
               "conditions": {
@@ -118,17 +121,20 @@
                 },
                 "conditions": [
                   {
-                    "id": "e87d42c6-5ea3-4c15-841b-4b0cb4c18168",
-                    "leftValue": "={{ $json.nivel_confianza }}",
-                    "rightValue": 80,
+                    "id": "3d868780-c0ad-4f0e-89ca-e6dc277064e4",
+                    "leftValue": "={{ !($json.nivel_confianza >= 80 && ['Aprobado', 'Rechazado'].includes($json.veredicto)) }}",
+                    "rightValue": "",
                     "operator": {
-                      "type": "number",
-                      "operation": "lte"
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
                     }
                   }
                 ],
                 "combinator": "and"
-              }
+              },
+              "renameOutput": true,
+              "outputKey": "Revisión manual"
             },
             {
               "conditions": {
@@ -140,17 +146,20 @@
                 },
                 "conditions": [
                   {
-                    "id": "479eb447-fc45-4147-9847-92ea134665cb",
-                    "leftValue": "={{ $json.nivel_confianza }}",
-                    "rightValue": 40,
+                    "id": "0b7c802e-cb30-4450-8c27-a4c0eb963d12",
+                    "leftValue": "={{ $json.nivel_confianza >= 80 && $json.veredicto === 'Rechazado' }}",
+                    "rightValue": "",
                     "operator": {
-                      "type": "number",
-                      "operation": "gte"
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
                     }
                   }
                 ],
                 "combinator": "and"
-              }
+              },
+              "renameOutput": true,
+              "outputKey": "Rechazado"
             }
           ]
         },
@@ -167,8 +176,8 @@
     },
     {
       "parameters": {
-        "chatId": "6878861034",
-        "text": "=Hola, tu solicitud de justificación ha sido procesada automáticamente.  Veredicto: {{ $json.estado }} Razón: {{ $json.observaciones }}",
+        "chatId": "={{ $('Webhook Formulario').item.json.body.telegram_id }}",
+        "text": "=Hola {{ $('Webhook Formulario').item.json.body['Nombre completo'] }}, tu solicitud de justificación del {{ $('Webhook Formulario').item.json.body.fecha }} fue APROBADA.\nRazón: {{ $('Normalizar respuesta IA').item.json.razon }}",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -190,7 +199,7 @@
     {
       "parameters": {
         "chatId": "6878861034",
-        "text": "=⚠️ ALERTA: Se requiere revisión manual.\nEl alumno {{ $('Webhook Formulario').item.json.body['Nombre completo'] }} subió una justificación pero el sistema determinó duda.\nRazón de la IA: {{ $json.observaciones }}",
+        "text": "=⚠️ Revisión manual requerida\nEstudiante: {{ $('Webhook Formulario').item.json.body['Nombre completo'] }} ({{ $('Webhook Formulario').item.json.body.estudiante_id }})\nMotivo: {{ $('Webhook Formulario').item.json.body['Motivo de inasistencia'] }}\nVeredicto IA: {{ $('Normalizar respuesta IA').item.json.veredicto }} ({{ $('Normalizar respuesta IA').item.json.nivel_confianza }}%)\nRazón: {{ $('Normalizar respuesta IA').item.json.razon }}",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -211,8 +220,8 @@
     },
     {
       "parameters": {
-        "chatId": "6878861034",
-        "text": "=Hola. Tu solicitud de justificación ha sido rechazada automáticamente por el sistema debido a que la documentación adjunta no es legible, no coincide con los datos ingresados o no cumple con los requisitos mínimos. Por favor, vuelve a iniciar el proceso con un comprobante válido.",
+        "chatId": "={{ $('Webhook Formulario').item.json.body.telegram_id }}",
+        "text": "=Hola {{ $('Webhook Formulario').item.json.body['Nombre completo'] }}, tu solicitud de justificación del {{ $('Webhook Formulario').item.json.body.fecha }} fue RECHAZADA.\nRazón: {{ $('Normalizar respuesta IA').item.json.razon }}\nSi consideras que es un error, envía una nueva solicitud con un comprobante válido.",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -252,14 +261,15 @@
           "mappingMode": "defineBelow",
           "value": {
             "observaciones": "={{ $('Normalizar respuesta IA').item.json.razon }}",
-            "estado": "={{ $('Normalizar respuesta IA').item.json.veredicto }}",
+            "estado": "Aprobado",
             "nombre": "={{ $('Webhook Formulario').item.json.body['Nombre completo'] }}",
             "descripcion": "={{ $('Webhook Formulario').item.json.body['Descripción del motivo'] }}",
             "motivo": "={{ $('Webhook Formulario').item.json.body['Motivo de inasistencia'] }}",
             "fecha": "={{ $('Webhook Formulario').item.json.body.fecha }}",
             "telegram_ID": "={{ $('Webhook Formulario').item.json.body.telegram_id }}",
             "correo": "={{ $('Webhook Formulario').item.json.body.correo }}",
-            "estudiante_ID": "={{ $('Webhook Formulario').item.json.body.estudiante_id }}"
+            "estudiante_ID": "={{ $('Webhook Formulario').item.json.body.estudiante_id }}",
+            "fecha_registro": "={{ $now.toISO() }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -338,6 +348,15 @@
             {
               "id": "observaciones",
               "displayName": "observaciones",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fecha_registro",
+              "displayName": "fecha_registro",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -385,15 +404,16 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "observaciones": "={{ $json.razon }}",
-            "estado": "=En revisión",
+            "observaciones": "={{ $('Normalizar respuesta IA').item.json.razon }}",
+            "estado": "En revisión",
             "nombre": "={{ $('Webhook Formulario').item.json.body['Nombre completo'] }}",
             "descripcion": "={{ $('Webhook Formulario').item.json.body['Descripción del motivo'] }}",
             "motivo": "={{ $('Webhook Formulario').item.json.body['Motivo de inasistencia'] }}",
             "fecha": "={{ $('Webhook Formulario').item.json.body.fecha }}",
             "telegram_ID": "={{ $('Webhook Formulario').item.json.body.telegram_id }}",
             "correo": "={{ $('Webhook Formulario').item.json.body.correo }}",
-            "estudiante_ID": "={{ $('Webhook Formulario').item.json.body.estudiante_id }}"
+            "estudiante_ID": "={{ $('Webhook Formulario').item.json.body.estudiante_id }}",
+            "fecha_registro": "={{ $now.toISO() }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -472,6 +492,15 @@
             {
               "id": "observaciones",
               "displayName": "observaciones",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fecha_registro",
+              "displayName": "fecha_registro",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -519,15 +548,16 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "observaciones": "=Documentación ilegible o inconsistente con la solicitud.",
-            "estado": "=Rechazado (Baja Confianza)",
+            "observaciones": "={{ $('Normalizar respuesta IA').item.json.razon }}",
+            "estado": "Rechazado",
             "nombre": "={{ $('Webhook Formulario').item.json.body['Nombre completo'] }}",
             "descripcion": "={{ $('Webhook Formulario').item.json.body['Descripción del motivo'] }}",
             "motivo": "={{ $('Webhook Formulario').item.json.body['Motivo de inasistencia'] }}",
             "fecha": "={{ $('Webhook Formulario').item.json.body.fecha }}",
             "telegram_ID": "={{ $('Webhook Formulario').item.json.body.telegram_id }}",
             "correo": "={{ $('Webhook Formulario').item.json.body.correo }}",
-            "estudiante_ID": "={{ $('Webhook Formulario').item.json.body.estudiante_id }}"
+            "estudiante_ID": "={{ $('Webhook Formulario').item.json.body.estudiante_id }}",
+            "fecha_registro": "={{ $now.toISO() }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -606,6 +636,15 @@
             {
               "id": "observaciones",
               "displayName": "observaciones",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fecha_registro",
+              "displayName": "fecha_registro",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -1026,6 +1065,27 @@
       ],
       "id": "9bdf7de5-2eed-4105-a643-2fc1d45c5e02",
       "name": "Cada viernes 17:00"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Webhook Formulario').item.json.body.telegram_id }}",
+        "text": "=Hola {{ $('Webhook Formulario').item.json.body['Nombre completo'] }}, recibimos tu solicitud de justificación del {{ $('Webhook Formulario').item.json.body.fecha }}. Está EN REVISIÓN por el personal académico; te avisaremos el resultado.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        200
+      ],
+      "id": "52f95840-d316-4ac6-bba0-c266ccc21374",
+      "name": "Notificar en revisión (estudiante)",
+      "credentials": {
+        "telegramApi": {
+          "id": "OAavOYsMfJdfuBK8",
+          "name": "Telegram account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -1115,6 +1175,11 @@
         [
           {
             "node": "Alertar revisión manual (admin)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notificar en revisión (estudiante)",
             "type": "main",
             "index": 0
           }
